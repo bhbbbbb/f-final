@@ -24,6 +24,7 @@ def cleaning(load_df: LoadDFSchema):
     assert (load_df['event_type'] == 'load').sum() == len(load_df)
     assert (load_df['web_id'] == 'i3fresh').sum() == len(load_df)
     load_df = load_df.drop(['event_type', 'web_id'], axis=1)
+    load_df = load_df.astype({'session_id': 'int64'})
 
     n_samples_orig = len(load_df)
 
@@ -58,14 +59,18 @@ def cleaning(load_df: LoadDFSchema):
     domain = load_df.url_now.map(lambda url: urlparse(url).netloc)
 
     _load_df = load_df
-    load_df = load_df[domain.str.match(r'(mob\.)?i3fresh.tw')]
+    load_df = load_df[domain.str.match(r'(mob\.)?i3fresh.tw')].reset_index(
+        drop=True
+    )
     n_drop_samples = len(_load_df) - len(load_df)
     print('dropping samples those are not in i3.fresh')
     print(
         f'{n_drop_samples} samples ({n_drop_samples / n_samples_orig:.2%}) have been dropped.'
     )
 
-    path = load_df.url_now.map(lambda url: urlparse(url).path)
+    path = load_df.url_now.map(lambda url: urlparse(url).path
+                               ).rename('url_path')
+    load_df = pd.concat([load_df, path.to_frame()], axis=1)
 
     path_regex_to_drop = {
         'member': r'/+member\.(?:php|html)',
@@ -147,85 +152,57 @@ def cleaning(load_df: LoadDFSchema):
     item_cats = load_df.url_referrer.apply(find_referrer_cat)
 
     load_df = pd.concat([load_df, item_ids, item_types, item_cats], axis=1)
+
+    print("Sorting load_df by ['uuid_ind', 'session_id', 'timestamp']")
+    load_df = load_df.sort_values(by=['uuid_ind', 'session_id', 'timestamp']
+                                  ).reset_index(drop=True)
+
+    print('Dropping continuous duplicates')
+
+    def mark_continuous_duplicates():
+        _df = load_df[['uuid_ind', 'session_id']]
+        _url_paths = load_df['url_path']
+        yield True
+        for i, prev_path, cur_path in zip(
+            range(1, len(_df)), _url_paths, _url_paths[1:]
+        ):
+            if prev_path == cur_path:
+                prev_row = _df.iloc[i - 1]
+                cur_row = _df.iloc[i]
+                if (prev_row == cur_row).all():
+                    yield False
+                    continue
+            yield True
+
+    load_df_ = load_df
+    res = pd.Series(
+        list(tqdm(mark_continuous_duplicates(), total=len(load_df)))
+    )
+    print(load_df[:50][['uuid_ind', 'session_id', 'url_path', 'url_now']])
+    load_df = load_df[res]  #.reset_index(drop=True)
+    print(load_df[:50][['uuid_ind', 'session_id', 'url_path', 'url_now']])
+    n_drop_samples = len(load_df_) - len(load_df)
+    load_df = load_df.reset_index(drop=True)
+
+    print(f'{n_drop_samples} samples have been dropped.')
     return load_df
-
-    # remaining_path = path[~reduce(lambda a, b: a | b, filter_path())]
-    # assert remaining_path.empty
-    # # print(path.value_counts())
-    # print(remaining_path.value_counts())
-
-
-def is_sorted(s: pd.Series):
-    if len(s) == 1:
-        return True
-
-    s = s.to_numpy()
-    return ((s[1:] - s[:-1]) < 0).sum() == 0
-
-
-def mp_sorting_task(session_id):
-    global load_df
-    session_df: LoadDFSchema = load_df[load_df.session_id == session_id]
-
-    if len(vc := session_df['uuid_ind'].value_counts()) > 1:
-        print('multiple_user_detected', session_id, vc)
-        with open(
-            f'muluser_sessions/{session_id}', 'w', encoding='utf8'
-        ) as fout:
-            fout.write(str(vc))
-
-    if is_sorted(session_df['timestamp']):
-        return session_df.reset_index(drop=True)
-
-    print(session_id, 'is now sorted.')
-    return session_df.sort_values('timestamp').reset_index(drop=True)
-
-
-def mp_init(df):
-    global load_df
-    load_df = df
-
-
-# Sort every sessions
-def sort_df_by_timestamp(load_df: LoadDFSchema) -> LoadDFSchema:
-
-    return load_df.sort_values(by=['uuid_ind', 'session_id', 'timestamp']
-                               ).reset_index(drop=True)
-    # with Pool(processes=4, initializer=mp_init, initargs=(load_df, )) as pool:
-
-    #     uniques = load_df[['session_id', 'uuid_ind']].drop_duplicates()
-    #     res = pool.imap(mp_sorting_task, uniques, chunksize=128)
-
-    #     sorted_load_df = pd.concat(tqdm(res, total=len(uniques)), axis=0)
-    # assert len(sorted_load_df) == len(load_df)
-    # return sorted_load_df.reset_index(drop=True)
 
 
 def main():
 
-    # load_df: LoadDFSchema = pd.read_pickle(
-    #     os.path.join(DATASET_ROOT, 'load_df.pkl')
-    # )
-    # load_df = cleaning(load_df)
-    # load_df.to_pickle(os.path.join(DATASET_ROOT, 'load_df_ped_.pkl'))
-
-    # return
     load_df: LoadDFSchema = pd.read_pickle(
-        os.path.join(DATASET_ROOT, 'load_df_ped_.pkl')
+        os.path.join(DATASET_ROOT, 'load_df.pkl')
     )
+    load_df = cleaning(load_df)
+    load_df.to_pickle(os.path.join(DATASET_ROOT, 'load_df_ped_.pkl'))
+    return
 
-    # for session_id in tqdm(load_df['session_id'].unique()):
-    #     session_df = load_df[load_df['session_id'] == session_id]
-    #     if len(vc := session_df['uuid_ind'].value_counts()) > 1:
-    #         print(session_id, vc)
-    #         raise
-    load_df = load_df.astype({'session_id': 'int64'})
-    print('start sorting')
-    # load_df = sort_df_by_timestamp(load_df)
-    # TODO: Drop continuous duplicates
+    # load_df: LoadDFSchema = pd.read_pickle(
+    #     os.path.join(DATASET_ROOT, 'load_df_ped_.pkl')
+    # )
 
     # load_df.to_pickle(os.path.join(DATASET_ROOT, 'load_df_ped.pkl'))
-    return
+    # return
 
 
 if __name__ == '__main__':
