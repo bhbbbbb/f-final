@@ -133,7 +133,8 @@ def cleaning(load_df: LoadDFSchema):
     )
 
     item_ids = path.map(
-        lambda p: re.match(r'/+(?:cheap|favorable)_(\d+)\.html', p).group(1)
+        lambda p:
+        int(re.match(r'/+(?:cheap|favorable)_(\d+)\.html', p).group(1))
     ).rename('item_id')
     item_types = path.str.match(item_regexes['cheap']
                                 ).map({
@@ -152,6 +153,14 @@ def cleaning(load_df: LoadDFSchema):
     item_cats = load_df.url_referrer.apply(find_referrer_cat)
 
     load_df = pd.concat([load_df, item_ids, item_types, item_cats], axis=1)
+    load_df = load_df.astype(
+        {
+            'item_id': 'int64',
+            'item_type': 'str',
+            'main_cat': 'Int64',
+            'sub_cat': 'Int64',
+        }
+    )
 
     print("Sorting load_df by ['uuid_ind', 'session_id', 'timestamp']")
     load_df = load_df.sort_values(by=['uuid_ind', 'session_id', 'timestamp']
@@ -194,7 +203,7 @@ def main():
         os.path.join(DATASET_ROOT, 'load_df.pkl')
     )
     load_df = cleaning(load_df)
-    load_df.to_pickle(os.path.join(DATASET_ROOT, 'load_df_ped_.pkl'))
+    load_df.to_pickle(os.path.join(DATASET_ROOT, 'load_df_ped.pkl'))
     return
 
     # load_df: LoadDFSchema = pd.read_pickle(
