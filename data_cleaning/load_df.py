@@ -54,6 +54,7 @@ def cleaning(load_df: LoadDFSchema):
     print(
         f'{n_drop_samples} samples ({n_drop_samples / n_samples_orig:.2%}) have been dropped.'
     )
+    raise
 
     # Find all paths of urls
     domain = load_df.url_now.map(lambda url: urlparse(url).netloc)

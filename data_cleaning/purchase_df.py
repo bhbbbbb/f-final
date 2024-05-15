@@ -53,6 +53,15 @@ def main():
     # purchase_df['products'].map(check_products_in_order_duplicated)
 
     print('dropping orders those contain no product')
+    pd.set_option('display.width', 10000)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', 100)
+    pd.set_option('max_colwidth', None)
+    pd.set_option('display.expand_frame_repr', False)
+    purchase_df = purchase_df[purchase_df['products'].map(len) == 0]
+    purchase_df.head().to_csv('figs/purchase_df_no_product_order_exp.csv')
+    print(purchase_df.head())
+    raise
     purchase_df_ = purchase_df
     purchase_df = purchase_df[purchase_df['products'].map(len) > 0]
     n_dropped = len(purchase_df_) - len(purchase_df)
