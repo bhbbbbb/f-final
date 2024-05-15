@@ -1,0 +1,1 @@
+from .data import N_RPODUCTS, AVAILABLE_PRODUCT_IDS
