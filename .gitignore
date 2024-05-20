@@ -3,3 +3,5 @@ figs
 dataset
 *.pkl
 *.egg-info
+results
+*.sh
