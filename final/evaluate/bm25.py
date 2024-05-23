@@ -84,7 +84,7 @@ class BM25:
                 self.idf[word] = idf
             else:
                 to_delete.append(word)
-        print(f"Dropping {len(to_delete)} terms")
+        # print(f"Dropping {len(to_delete)} terms")
         for word in to_delete:
             del self.t2d[word]
 

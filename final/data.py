@@ -18,7 +18,32 @@ AVAILABLE_PRODUCT_IDS = [5, 23, 24, 25, 28, 46, 51, 56, 76, 77, 79, 81, 87, 93, 
 PID_MAPPING = {pid: i for i, pid in enumerate(AVAILABLE_PRODUCT_IDS)}
 
 
-def _download(cache_hashed_dir: str):
+@lru_cache(maxsize=4)
+def _download(url: str, cache_dir: str):
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+
+    file_name = os.path.basename(urlparse(url).path)
+    ext = os.path.splitext(file_name)[-1]
+    assert ext in ('.json', '.pkl')
+    file_path = os.path.join(cache_dir, hashlib.md5(url.encode()).hexdigest())
+
+    if not os.path.exists(file_path):
+        headers = {'user-agent': 'Wget/1.16 (linux-gnu)'}
+        res = requests.get(url, headers=headers)
+        assert res.status_code == 200
+        with open(file_path, 'wb') as fout:
+            fout.write(res.content)
+
+    if ext == '.json':
+        with open(file_path, 'r', encoding='utf8') as fin:
+            return json.load(fin)
+    else:
+        assert ext == '.pkl'
+        return pd.read_pickle(file_path)
+
+
+def _download_datasets(cache_hashed_dir: str):
     os.makedirs(cache_hashed_dir, exist_ok=True)
     file_name = os.path.basename(urlparse(DATASET_URL).path)
     file_path = os.path.join(cache_hashed_dir, file_name)
@@ -31,7 +56,7 @@ def _download(cache_hashed_dir: str):
             fout.write(res.content)
 
     with zipfile.ZipFile(file_path, mode='r') as zipfin:
-        pwd = getattr(_download, 'pwd', None)
+        pwd = getattr(_download_datasets, 'pwd', None)
         if pwd is None:
             pwd = input(
                 'You have not set the password for the dataset, '
@@ -47,7 +72,7 @@ def _get_file(file_name: str, cache_dir):
     cache_dir = os.path.join(cache_dir, _DATASET_URL_HASH)
     file_path = os.path.join(cache_dir, file_name)
     if not os.path.isfile(file_path):
-        _download(cache_dir)
+        _download_datasets(cache_dir)
     ext = os.path.splitext(file_name)[-1]
     assert ext in ('.json', '.pkl')
     if ext == '.json':
@@ -85,7 +110,7 @@ def _create_split(
 
 
 def set_password(password: str):
-    _download.pwd = password
+    _download_datasets.pwd = password
     return
 
 
@@ -109,3 +134,9 @@ def merged_df(
     y_true = merged_df['products'].map(products_set_to_array)
     merged_df.loc[:, 'y_true'] = y_true
     return _create_split(merged_df)
+
+
+def product_tags_v4(cache_dir: str = CACHE_DIR):
+    URL = 'https://www.dropbox.com/scl/fi/bmgexj4ds6vxdp2jz6g3i/product_tags_v4.json?rlkey=xdoxcztucbpor22tr61xz3bwi&st=rfr3o5wp&dl=0'
+    d = _download(URL, cache_dir=CACHE_DIR)
+    return {int(pid): tags for pid, tags in d.items()}
