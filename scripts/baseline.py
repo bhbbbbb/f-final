@@ -17,6 +17,7 @@ def baseline(df: pd.DataFrame):
         #     raise
         loads = [pid_mapping[load['item_id']] for load in loads]
         scores = np.random.randint(-1000, 0, len(final.AVAILABLE_PRODUCT_IDS))
+        # scores = np.full(len(final.AVAILABLE_PRODUCT_IDS), fill_value=-1)
         for i, pid in enumerate(loads):
             scores[pid] = i
         return scores
@@ -40,6 +41,7 @@ def main():
         res = baseline(df)
         res['name'] = f'latest_first/{split}'
         rows.append(res)
+    print(res)
     pd.DataFrame(rows).set_index('name').to_csv('results/latest_first.csv')
 
     # evaluate()
