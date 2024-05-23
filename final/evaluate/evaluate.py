@@ -117,7 +117,7 @@ class TagsEvaluator:
         def cal_score(loads: list[dict]):
             query = reduce(
                 self.query_reduce_fn,
-                [self.product_tags[load['item_id']] for load in loads],
+                [self.product_tags[pid] for pid in loads],
                 list(),
             )
             scores_dict = self.scores_fn(query, self.corpus)
@@ -126,7 +126,7 @@ class TagsEvaluator:
                 scores[pid] = score
             return scores
 
-        return merged_df['loads'].map(cal_score)
+        return merged_df['loaded_pids'].map(cal_score)
 
     @overload
     def cal_ranking_metrics(

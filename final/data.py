@@ -125,6 +125,9 @@ def merged_df(
     FILE_NAME = 'merged_df_v2.pkl'
     merged_df: pd.DataFrame = _get_file(FILE_NAME, cache_dir)
     merged_df = merged_df.set_index('order_id')
+    merged_df.loc[:, 'loaded_pids'] = merged_df['loads'].map(
+        lambda loads: [load['item_id'] for load in loads]
+    )
 
     def products_set_to_array(products: set[int]):
         a = np.zeros(N_RPODUCTS, dtype=int)
