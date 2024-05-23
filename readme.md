@@ -9,7 +9,19 @@ pip install git+https://github.com/bhbbbbb/f-final
 
 ## Basic
 
-Check [general_demo](./demos/demo.ipynb) for some demonstration of basic usage.
+- Easiest way to evaluate tags for all products.
+
+```python
+>>> final.TagsEvaluator(product_tags).cal_ranking_metrics(final.data.merged_df()['train'])
+{
+    'hr@1': ...,
+    'hr@5': ...,
+    'hr@10': ...,
+    ...
+}
+```
+
+Check [general_demo](./demos/demo.ipynb) for more demonstration of basic usage.
 
 ## `final.data`
 
