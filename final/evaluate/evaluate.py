@@ -6,6 +6,13 @@ from .bm25 import BM25
 from ..data import N_RPODUCTS, AVAILABLE_PRODUCT_IDS, merged_df as get_merged_df
 
 
+def _score_dict_to_arr(score_dict: dict[int, float]):
+    scores = np.random.rand(len(AVAILABLE_PRODUCT_IDS)) - 11.
+    for pid, score in score_dict.items():
+        scores[pid] = score
+    return scores
+
+
 def ranking_metrics(
     y_score: np.ndarray | pd.Series,
     y_true: np.ndarray | pd.Series,
@@ -24,6 +31,13 @@ def ranking_metrics(
 
     if isinstance(y_score, pd.Series):
         y_score = np.array(y_score.to_list())
+    elif not isinstance(y_score, np.ndarray):
+        y_score = np.array(y_score)
+    if len(y_score.shape) == 1:
+        assert isinstance(y_score[0], dict)
+        y_score = np.array(
+            [_score_dict_to_arr(score_dict) for score_dict in y_score]
+        )
     if isinstance(y_true, pd.Series):
         y_true = np.array(y_true.to_list())
 
@@ -82,9 +96,18 @@ class TagsEvaluator:
     def __init__(
         self,
         product_tags: dict[int, list[str]],
-        query_reduce: Literal['union', 'concat'] = 'concat',
+        query_fn: Literal['union', 'concat']
+        | Callable[[list[list[str]]], list[str]] = 'concat',
         score_algorithm: Literal['bm25', 'iou'] = 'bm25',
     ):
+        """
+        Args:
+            product_tags (dict[int, list[str]]): Mapping that map product ids to their tags.
+            query_fn (Literal['union', 'concat'] | Callable[[list[list[str]]], list[str]], optional): 
+                Function to reduce the tags of loaded products (list[list[str]]) to be query (list[str]).
+                Defaults to 'concat'.
+            score_algorithm (Literal['bm25', 'iou'], optional): _description_. Defaults to 'bm25'.
+        """
 
         assert set(product_tags) >= set(AVAILABLE_PRODUCT_IDS)
         if len(product_tags) > len(AVAILABLE_PRODUCT_IDS):
@@ -99,13 +122,17 @@ class TagsEvaluator:
             bm25 = BM25(self.corpus)
             self.scores_fn = bm25.get_scores
         else:
-            assert query_reduce == 'union', 'when score using IoU, qurey_reduce only accept "union"'
+            assert query_fn == 'union', 'when score using IoU, qurey_reduce only accept "union"'
             self.scores_fn = iou_score
 
-        self.query_reduce_fn = (
-            (lambda a, b: a + b) if query_reduce == 'concat' else
-            (lambda a, b: set(a) | set(b))
-        )
+        if query_fn in ('union', 'concat'):
+            query_reduce_fn = (
+                (lambda a, b: a + b) if query_fn == 'concat' else
+                (lambda a, b: set(a) | set(b))
+            )
+            self.query_fn = lambda seq: reduce(query_reduce_fn, seq, list())
+        else:
+            self.query_fn = query_fn
 
     def cal_scores(self, merged_df: pd.DataFrame):
         """Calculate recommendation scores of the orders in given merged_df
@@ -115,16 +142,8 @@ class TagsEvaluator:
         """
 
         def cal_score(loads: list[dict]):
-            query = reduce(
-                self.query_reduce_fn,
-                [self.product_tags[pid] for pid in loads],
-                list(),
-            )
-            scores_dict = self.scores_fn(query, self.corpus)
-            scores = np.random.rand(len(AVAILABLE_PRODUCT_IDS)) - 11.
-            for pid, score in scores_dict.items():
-                scores[pid] = score
-            return scores
+            query = self.query_fn([self.product_tags[pid] for pid in loads])
+            return self.scores_fn(query, self.corpus)
 
         return merged_df['loaded_pids'].map(cal_score)
 
@@ -134,7 +153,11 @@ class TagsEvaluator:
         *,
         ks: list[int] = ...,
     ) -> dict[Literal['train', 'val', 'test'], dict[float]]:
-        ...
+        """Calculate the ranking metrics for the orders in three merged_df in different splits.
+
+        Returns:
+            {'train': metrics_train, 'val': metrics_val, 'test': metrics_test}
+        """
 
     @overload
     def cal_ranking_metrics(
@@ -143,7 +166,13 @@ class TagsEvaluator:
         *,
         ks: list[int] = ...,
     ) -> dict[float]:
-        ...
+        """Calculate the ranking metrics for the orders in the given merged_df.
+        This is equivalent to 
+        >>> final.ranking_metrics(evalulator.cal_scores(merged_df), merged_df['y_true'], ks=ks)
+
+        Returns:
+            dict[float]: ranking metrics
+        """
 
     def cal_ranking_metrics(
         self,
