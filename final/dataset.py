@@ -92,11 +92,13 @@ class InferenceDataset(TorchDataset):
 
     def __init__(
         self,
+        raw_tags: dict[int, list[str]],
         user_names: dict[int, str] = None,
         n_tags_per_product: int = 5,
     ):
         super().__init__()
         self.user_names = user_names
+        self.raw_tags = raw_tags
         self.n_tags_per_product = n_tags_per_product
         return
 
@@ -113,7 +115,7 @@ class InferenceDataset(TorchDataset):
                 ', '.join(self.raw_tags[pid][:self.n_tags_per_product])
             )
 
-        input_ = pid_to_input(data.AVAILABLE_PRODUCT_IDS[index])
+        input_ = pid_to_input(0, data.AVAILABLE_PRODUCT_IDS[index])
         return {
             'instruction': 'User: First time buyer',
             'input': input_,
