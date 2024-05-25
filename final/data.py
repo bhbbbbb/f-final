@@ -120,8 +120,8 @@ def load_df(cache_dir: str = CACHE_DIR) -> pd.DataFrame:
 
 
 def merged_df(
-    cache_dir: str = CACHE_DIR
-) -> dict[Literal['train', 'val', 'test'], pd.DataFrame]:
+    auto_split: bool = True, cache_dir: str = CACHE_DIR
+) -> dict[Literal['train', 'val', 'test'], pd.DataFrame] | pd.DataFrame:
     FILE_NAME = 'merged_df_v2.pkl'
     merged_df: pd.DataFrame = _get_file(FILE_NAME, cache_dir)
     merged_df = merged_df.set_index('order_id')
@@ -136,10 +136,18 @@ def merged_df(
 
     y_true = merged_df['products'].map(products_set_to_array)
     merged_df.loc[:, 'y_true'] = y_true
-    return _create_split(merged_df)
+    if auto_split:
+        return _create_split(merged_df)
+    return merged_df
+
+
+def default_user_names(cache_dir: str = CACHE_DIR) -> dict[int, str]:
+    URL = 'https://www.dropbox.com/scl/fi/47qjthbs8eobwewttad9q/user_names.json?rlkey=kv6p3et0lh4xl0pzv2i4pg551&st=aj746lb4&dl=0'
+    names = _download(URL, cache_dir=cache_dir)
+    return {int(pid): name for pid, name in names.items()}
 
 
 def product_tags_v4(cache_dir: str = CACHE_DIR):
     URL = 'https://www.dropbox.com/scl/fi/bmgexj4ds6vxdp2jz6g3i/product_tags_v4.json?rlkey=xdoxcztucbpor22tr61xz3bwi&st=rfr3o5wp&dl=0'
-    d = _download(URL, cache_dir=CACHE_DIR)
+    d = _download(URL, cache_dir=cache_dir)
     return {int(pid): tags for pid, tags in d.items()}
