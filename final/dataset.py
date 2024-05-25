@@ -1,7 +1,7 @@
 from typing import Literal
 import pandas as pd
 from torch.utils.data import Dataset as TorchDataset
-import final
+from . import data
 
 
 class Dataset(TorchDataset):
@@ -37,7 +37,7 @@ class Dataset(TorchDataset):
 
     @staticmethod
     def get_expanded_dataset(split: Literal['train', 'val']):
-        merged_df = final.data.merged_df()[split]
+        merged_df = data.merged_df()[split]
         for _order_id, row in merged_df.iterrows():
             for product in row['products']:
                 yield {
@@ -86,3 +86,35 @@ class Dataset(TorchDataset):
     #         order = np.random.choice(self.orders, 1)[0]
     #         sample = np.random.choice(order, 1)[0]
     #         yield sample
+
+
+class InferenceDataset(TorchDataset):
+
+    def __init__(
+        self,
+        user_names: dict[int, str] = None,
+        n_tags_per_product: int = 5,
+    ):
+        super().__init__()
+        self.user_names = user_names
+        self.n_tags_per_product = n_tags_per_product
+        return
+
+    def __len__(self):
+        return data.N_RPODUCTS
+
+    def __getitem__(self, index: int):
+
+        assert self.user_names is None
+
+        def pid_to_input(i: int, pid: int):
+            return (
+                f'{i+1}. ' +
+                ', '.join(self.raw_tags[pid][:self.n_tags_per_product])
+            )
+
+        input_ = pid_to_input(data.AVAILABLE_PRODUCT_IDS[index])
+        return {
+            'instruction': 'User: First time buyer',
+            'input': input_,
+        }
