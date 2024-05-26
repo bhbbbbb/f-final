@@ -10,14 +10,14 @@ class Dataset(TorchDataset):
         self,
         split: Literal['train', 'val'],
         raw_tags: dict[int, list[str]],
-        generate_training_data_fn=None,
         user_names: dict[int, str] = None,
         n_tags_per_product: int = 5,
         max_load_len: int = 20,
         predict_purchase_only: bool = True,
     ):
         super().__init__()
-        self.df = pd.DataFrame(Dataset.get_expanded_dataset(split))
+        self.df = pd.DataFrame(Dataset.get_expanded_dataset(split)
+                               ).sample(frac=1)
         self.raw_tags = raw_tags
         if user_names is None:
             print('user_names is not used.')
@@ -32,7 +32,6 @@ class Dataset(TorchDataset):
         self.predict_purchase_only = predict_purchase_only
         self.n_tags_per_product = n_tags_per_product
         self.max_load_len = max_load_len
-        self.generate_training_data_fn = generate_training_data_fn
         return
 
     @staticmethod
@@ -71,9 +70,7 @@ class Dataset(TorchDataset):
                 'input': seq[0],
                 'output': '\n'.join(seq[1:]),
             }
-        if self.generate_training_data_fn is None:
-            return data
-        return self.generate_training_data_fn(data)
+        return data
 
     # def __iter__(self):
     #     info = get_worker_info()

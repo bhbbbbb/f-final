@@ -5,3 +5,5 @@ dataset
 *.egg-info
 results
 *.sh
+taide_7b
+exp2
