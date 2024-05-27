@@ -9,6 +9,43 @@ def url_to_pid(url: str):
     return int(match.group(1))
 
 
+def _tags_to_bow(
+    tags: list[str] | dict[int, list[str]] | list[list[str]],
+    transform_fn,
+) -> list[str]:
+
+    if not isinstance(tags, dict) and isinstance(tags[0], str):
+        return list(transform_fn(tags))
+
+    if isinstance(tags, dict):
+        return {pid: list(transform_fn(ts)) for pid, ts in tags.items()}
+
+    return [list(transform_fn(ts)) for ts in tags]
+
+
+def english_tags_to_bow(
+    tags: list[str] | dict[int, list[str]] | list[list[str]]
+) -> list[str]:
+    """Tags to bag-of-words
+
+    E.g. 
+    >>> english_tags_to_bow(['hello world', 'I am a tag'])
+    >>> ['hello', 'world', 'I', 'am', 'a', 'tag']
+
+    Args:
+        tags (list[str] | dict[int, list[str]] | list[list[str]]): list of tags
+
+    Returns:
+        Bag of words
+    """
+
+    def _gen(_tags: list[str]):
+        for tag in _tags:
+            yield from re.split(r'\s+', tag)
+
+    return _tags_to_bow(tags, _gen)
+
+
 def chinese_tags_to_bow(
     tags: list[str] | dict[int, list[str]] | list[list[str]]
 ) -> list[str]:
@@ -18,13 +55,7 @@ def chinese_tags_to_bow(
             for character in tag:
                 yield character
 
-    if not isinstance(tags, dict) and isinstance(tags[0], str):
-        return list(_gen(tags))
-
-    if isinstance(tags, dict):
-        return {pid: list(_gen(ts)) for pid, ts in tags.items()}
-
-    return [list(_gen(ts)) for ts in tags]
+    return _tags_to_bow(tags, _gen)
 
 
 def baseline_score(merged_df: pd.DataFrame):

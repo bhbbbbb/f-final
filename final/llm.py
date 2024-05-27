@@ -82,7 +82,7 @@ class LLM:
         inference_only: bool = True,
         ckpt_dir: str = None,
         real_ckpt_dir: str = None,
-        cache_dir: str = './cache',
+        cache_dir: str = '.cache',
     ):
         self.model_name = model_name
         self.instruction = instruction
