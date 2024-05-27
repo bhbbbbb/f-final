@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 import pandas as pd
 from torch.utils.data import Dataset as TorchDataset
@@ -55,20 +56,23 @@ class Dataset(TorchDataset):
                 ', '.join(self.raw_tags[pid][:self.n_tags_per_product])
             )
 
+        def de_numbering(output: str):
+            return re.sub(r'\d+\. ', '', output)
+
         seq, uuid = self.df.iloc[index]
         seq = seq[-self.max_load_len:]
         seq = list(map(pid_to_input, range(len(seq)), seq))
         if self.predict_purchase_only:
             data = {
                 'instruction': f'User: {self.user_names[uuid]}',
-                'input': '\n'.join(seq[:-1]),
-                'output': seq[-1],
+                'input': '\n'.join(seq[:-1]) + f'\n{len(seq)}.',
+                'output': de_numbering(seq[-1]),
             }
         else:
             data = {
                 'instruction': f'User: {self.user_names[uuid]}',
-                'input': seq[0],
-                'output': '\n'.join(seq[1:]),
+                'input': seq[0] + f'\n2.',
+                'output': '\n'.join([de_numbering(seq[1]), *seq[2:]]),
             }
         return data
 
@@ -106,13 +110,12 @@ class InferenceDataset(TorchDataset):
 
         assert self.user_names is None
 
-        def pid_to_input(i: int, pid: int):
-            return (
-                f'{i+1}. ' +
-                ', '.join(self.raw_tags[pid][:self.n_tags_per_product])
-            )
+        pid = data.AVAILABLE_PRODUCT_IDS[index]
+        input_ = (
+            '1. ' + ', '.join(self.raw_tags[pid][:self.n_tags_per_product]) +
+            '\n2.'
+        )
 
-        input_ = pid_to_input(0, data.AVAILABLE_PRODUCT_IDS[index])
         return {
             'instruction': 'User: First time buyer',
             'input': input_,

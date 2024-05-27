@@ -1,4 +1,6 @@
+from typing import Iterable
 import os
+import re
 import sys
 import warnings
 import logging
@@ -15,11 +17,31 @@ from colorama import *
 
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig
-from transformers import GenerationConfig
+from transformers import GenerationConfig, trainer_utils
 from peft import (
-    prepare_model_for_int8_training, LoraConfig, get_peft_model,
-    get_peft_model_state_dict, prepare_model_for_kbit_training
+    LoraConfig, get_peft_model, get_peft_model_state_dict,
+    prepare_model_for_kbit_training
 )
+
+PREFIX_CHECKPOINT_DIR = "ckpt"
+_re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
+
+
+def get_last_checkpoint(folder):
+    content = os.listdir(folder)
+    checkpoints = [
+        path for path in content if _re_checkpoint.search(path) is not None
+        and os.path.isdir(os.path.join(folder, path))
+    ]
+    if len(checkpoints) == 0:
+        return
+    return os.path.join(
+        folder,
+        max(
+            checkpoints,
+            key=lambda x: int(_re_checkpoint.search(x).groups()[0])
+        )
+    )
 
 
 class _WrapDataset(torch.utils.data.Dataset):
@@ -29,7 +51,7 @@ class _WrapDataset(torch.utils.data.Dataset):
         self.hook = hook
         return
 
-    def len(self):
+    def __len__(self):
         return len(self.ref)
 
     def __getitem__(self, index):
@@ -56,15 +78,24 @@ class LLM:
         self,
         model_name: str,
         instruction: str,
-        ckpt_dir: str,
         ckpt_name: str = None,
+        inference_only: bool = True,
+        ckpt_dir: str = None,
+        real_ckpt_dir: str = None,
         cache_dir: str = './cache',
     ):
         self.model_name = model_name
         self.instruction = instruction
         self.cache_dir = cache_dir
         self.ckpt_dir = ckpt_dir
-        self.ckpt_name = ckpt_name
+        self.real_ckpt_dir = real_ckpt_dir
+        self.ckpt_name = ckpt_name or get_last_checkpoint(real_ckpt_dir)
+        if self.ckpt_name is None:
+            self.cur_ckpt_count = 0
+        else:
+            cur_ckpt = _re_checkpoint.search(os.path.basename(self.ckpt_name))
+            self.cur_ckpt_count = cur_ckpt and int(cur_ckpt.group(1))
+        self.inference_only = inference_only
         self._init(model_name)
         return
 
@@ -83,7 +114,7 @@ class LLM:
             # low_cpu_mem_usage=True
         )
 
-        logging.getLogger('transformers').setLevel(logging.ERROR)
+        # logging.getLogger('transformers').setLevel(logging.ERROR)
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             add_eos_token=True,
@@ -92,11 +123,14 @@ class LLM:
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        if self.ckpt_name is not None:
+        if self.inference_only:
+            assert self.ckpt_name is not None, (
+                'the inference_only=True is passed. However, no ckpt_name is provided'
+            )
             print(f'loading checkpoint from {self.ckpt_name}')
-            self.model = PeftModel.from_pretrained(self.model, self.ckpt_name)
-        else:
-            print('Warning: checkpoint not used.')
+            self.model = PeftModel.from_pretrained(
+                self.model, self.ckpt_name, is_trainable=False
+            )
         return
 
     def train(
@@ -105,24 +139,42 @@ class LLM:
         val_dataset: torch.utils.data.Dataset,
         num_epoch: int,
         save_steps: int = 15,
-        save_total_limit=3,  # maximux saved ckpts
+        save_total_limit=10,  # maximux saved ckpts
         learning_rate: float = LEARNING_RATE,
         report_to=None,
     ):
+        assert self.ckpt_dir is not None
+        assert self.real_ckpt_dir is not None
+        assert self.cur_ckpt_count is not None
         os.makedirs(self.ckpt_dir, exist_ok=True)
-
-        self.model = prepare_model_for_int8_training(self.model)
-
-        lora_config = LoraConfig(
-            r=LORA_R,
-            lora_alpha=LORA_ALPHA,
-            target_modules=TARGET_MODULES,
-            lora_dropout=LORA_DROPOUT,
-            bias="none",
-            task_type="CAUSAL_LM",
+        next_ckpt_dir = os.path.join(
+            self.real_ckpt_dir, f'ckpt-{self.cur_ckpt_count + num_epoch}'
         )
-        self.model = get_peft_model(self.model, lora_config)
+        print(
+            f'after the finetuning finshed, the checkpoint will save in {next_ckpt_dir}'
+        )
 
+        self.model = prepare_model_for_kbit_training(self.model)
+        if self.ckpt_name is None:
+            lora_config = LoraConfig(
+                r=LORA_R,
+                lora_alpha=LORA_ALPHA,
+                target_modules=TARGET_MODULES,
+                lora_dropout=LORA_DROPOUT,
+                bias="none",
+                task_type="CAUSAL_LM",
+            )
+            self.model = get_peft_model(self.model, lora_config)
+            print(
+                f'Warning: no ckpt_name found. The finetuning will start from scratch.'
+            )
+        else:
+            print(f'loading checkpoint from {self.ckpt_name}')
+            self.model = PeftModel.from_pretrained(
+                self.model, self.ckpt_name, is_trainable=True
+            )
+
+        self.model.print_trainable_parameters()
         self.tokenizer.pad_token_id = 0
 
         trainer = transformers.Trainer(
@@ -158,9 +210,14 @@ class LLM:
         if torch.__version__ >= "2" and sys.platform != 'win32':
             self.model = torch.compile(self.model)
 
-        trainer.train()
+        # trainer.train()
+        trainer._inner_training_loop(
+            trainer._train_batch_size,
+            args=trainer.args,
+        )
 
-        self.model.save_pretrained(self.ckpt_dir)
+        os.makedirs(next_ckpt_dir, exist_ok=True)
+        self.model.save_pretrained(next_ckpt_dir)
         return
 
     # def inference(self):
@@ -294,12 +351,17 @@ class LLM:
             max_new_tokens=max_len,
         )
 
+        to_remove_tokens = [
+            r'\[[\\/]?inst\]',
+            r'<[\\/]?s>',
+            r'assistant:?',
+            r'<[\\/]?\w+>',
+        ]
         for s in generation_output.sequences:
             raw_output = self.tokenizer.decode(s)
-            output = raw_output.split("[/INST]")[1].replace(
-                "</s>", ""
-            ).replace("<s>", "").replace("Assistant:",
-                                         "").replace("Assistant", "").strip()
+            output = raw_output.split("[/INST]")[1]
+            for token in to_remove_tokens:
+                output = re.sub(token, '', output, flags=re.IGNORECASE)
             if (verbose):
                 print('raw_output: ', raw_output)
                 print('output: ', output)
@@ -327,23 +389,27 @@ class LLM:
             data_point['input'] += f'\n{predict}'
         return data_point['input']
 
-    def multi_beam_inference(
+    def multi_beam_generation(
         self,
         data_point,
-        generation_config,
+        generation_configs: list,
         max_len,
-        n: int,
         verbose=False,
     ):
 
-        assert n > 1
-        predicts = data_point['input']
-        for _ in range(n):
+        assert isinstance(
+            generation_configs, Iterable
+        ) and len(generation_configs) > 1, (
+            'Single generation config is passed. Used single_inference instead.'
+        )
+        data_point = dict(data_point)
+        assert False, 'TODO'
+        for generation_config in generation_configs:
             predict = self.single_inference(
                 data_point,
                 generation_config,
                 max_len,
                 verbose=verbose,
             )
-            predicts += f'\n{predict}'
-        return predicts
+            data_point['input'] += f'\n{predict}'
+        return data_point['input']
