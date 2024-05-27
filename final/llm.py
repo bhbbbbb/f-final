@@ -379,17 +379,19 @@ class LLM:
 
         assert n > 1
         data_point = dict(data_point)
-        for _ in range(n):
+        for i in range(n):
+            if i > 0:
+                data_point['input'] += f'\n{i + 2}.'
             predict = self.single_inference(
                 data_point,
                 generation_config,
                 max_len,
                 verbose=verbose,
             )
-            data_point['input'] += f'\n{predict}'
+            data_point['input'] += f' {predict}'
         return data_point['input']
 
-    def multi_beam_generation(
+    def multi_beam_inference(
         self,
         data_point,
         generation_configs: list,
@@ -403,7 +405,7 @@ class LLM:
             'Single generation config is passed. Used single_inference instead.'
         )
         data_point = dict(data_point)
-        assert False, 'TODO'
+        predicts = []
         for generation_config in generation_configs:
             predict = self.single_inference(
                 data_point,
@@ -411,5 +413,5 @@ class LLM:
                 max_len,
                 verbose=verbose,
             )
-            data_point['input'] += f'\n{predict}'
-        return data_point['input']
+            predicts.append(predict)
+        return predicts
