@@ -139,7 +139,7 @@ class LLM:
         val_dataset: torch.utils.data.Dataset,
         num_epoch: int,
         save_steps: int = 15,
-        save_total_limit=10,  # maximux saved ckpts
+        save_total_limit=40,  # maximux saved ckpts
         learning_rate: float = LEARNING_RATE,
         report_to=None,
     ):
@@ -195,6 +195,7 @@ class LLM:
                 logging_steps=save_steps,
                 save_strategy="steps",
                 save_steps=save_steps,
+                # max_steps=15,
                 output_dir=self.ckpt_dir,
                 save_total_limit=save_total_limit,
                 ddp_find_unused_parameters=None,
@@ -210,11 +211,11 @@ class LLM:
         if torch.__version__ >= "2" and sys.platform != 'win32':
             self.model = torch.compile(self.model)
 
-        # trainer.train()
-        trainer._inner_training_loop(
-            trainer._train_batch_size,
-            args=trainer.args,
-        )
+        trainer.train()
+        # trainer._inner_training_loop(
+        #     trainer._train_batch_size,
+        #     args=trainer.args,
+        # )
 
         os.makedirs(next_ckpt_dir, exist_ok=True)
         self.model.save_pretrained(next_ckpt_dir)

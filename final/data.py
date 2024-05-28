@@ -174,7 +174,7 @@ def product_tags_v5_zh(cache_dir: str = _CACHE_DIR):
 
 
 def product_tags_v5_en(cache_dir: str = _CACHE_DIR):
-    URL = 'https://www.dropbox.com/scl/fi/zjwba42gi1nncqx45w3dm/product_raw_tags_v5_en.json?rlkey=pox4obz08fy0z3h2dt6azyc2t&st=i8jke445&dl=0'
+    URL = 'https://www.dropbox.com/scl/fi/quh5nx0hxgc8ddxv6jr3o/product_raw_tags_v5_en.json?rlkey=fx73i8roljymjvwoj57o4khln&st=lkv5xc1j&dl=0'
     d = _download(URL, cache_dir=cache_dir)
     return {int(pid): tags for pid, tags in d.items()}
 

@@ -20,15 +20,6 @@ class Dataset(TorchDataset):
         self.df = pd.DataFrame(Dataset.get_expanded_dataset(split)
                                ).sample(frac=1)
         self.raw_tags = raw_tags
-        if user_names is None:
-            print('user_names is not used.')
-
-            class DummyMapping:
-
-                def __getitem__(self, _item):
-                    return 'First time buyer'
-
-            user_names = DummyMapping()
         self.user_names = user_names
         self.predict_purchase_only = predict_purchase_only
         self.n_tags_per_product = n_tags_per_product
@@ -64,13 +55,15 @@ class Dataset(TorchDataset):
         seq = list(map(pid_to_input, range(len(seq)), seq))
         if self.predict_purchase_only:
             data = {
-                'instruction': f'User: {self.user_names[uuid]}',
+                'instruction': '' if self.user_names is None else
+                f'User: {self.user_names[uuid]}',
                 'input': '\n'.join(seq[:-1]) + f'\n{len(seq)}.',
                 'output': de_numbering(seq[-1]),
             }
         else:
             data = {
-                'instruction': f'User: {self.user_names[uuid]}',
+                'instruction': '' if self.user_names is None else
+                f'User: {self.user_names[uuid]}',
                 'input': seq[0] + f'\n2.',
                 'output': '\n'.join([de_numbering(seq[1]), *seq[2:]]),
             }
@@ -96,11 +89,13 @@ class InferenceDataset(TorchDataset):
         raw_tags: dict[int, list[str]],
         user_names: dict[int, str] = None,
         n_tags_per_product: int = 5,
+        legacy_output_first_time_buyer: bool = True,
     ):
         super().__init__()
         self.user_names = user_names
         self.raw_tags = raw_tags
         self.n_tags_per_product = n_tags_per_product
+        self.output_first_time_buyer = legacy_output_first_time_buyer
         return
 
     def __len__(self):
@@ -117,6 +112,8 @@ class InferenceDataset(TorchDataset):
         )
 
         return {
-            'instruction': 'User: First time buyer',
-            'input': input_,
+            'instruction':
+            'User: First time buyer' if self.output_first_time_buyer else '',
+            'input':
+            input_,
         }
