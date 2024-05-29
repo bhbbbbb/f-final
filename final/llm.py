@@ -25,6 +25,14 @@ from peft import (
 
 PREFIX_CHECKPOINT_DIR = "ckpt"
 _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
+PROMPT = """\
+[INST] <<SYS>>
+{instruction}
+<</SYS>>
+{user_instruction}
+[/INST]
+{input}
+"""
 
 
 def get_last_checkpoint(folder):
@@ -68,7 +76,7 @@ LEARNING_RATE = 3e-4
 MICRO_BATCH_SIZE = 4
 BATCH_SIZE = 16
 GRADIENT_ACCUMULATION_STEPS = BATCH_SIZE // MICRO_BATCH_SIZE
-CUTOFF_LEN = 256
+CUTOFF_LEN = 512
 VAL_SET_SIZE = 0
 
 
@@ -277,10 +285,10 @@ class LLM:
 [INST] <<SYS>>
 {self.instruction}
 <</SYS>>
-
 {data_point['instruction']}
+[/INST]
 {data_point['input']}
-[/INST]"""
+"""
         # count the number of input tokens
         len_user_prompt_tokens = (
             len(
@@ -337,10 +345,10 @@ class LLM:
 [INST] <<SYS>>
 {self.instruction}
 <</SYS>>
-
 {data_point['instruction']}
+[/INST]
 {data_point['input']}
-[/INST]"""
+"""
         inputs = self.tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].cuda()
 
