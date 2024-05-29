@@ -61,11 +61,17 @@ class Dataset(TorchDataset):
                 'output': de_numbering(seq[-1]),
             }
         else:
+            assert len(seq) >= 2, str(seq)
+            if len(seq[1:]) == 1:
+                output_ = de_numbering(seq[1])
+            else:
+                output_ = '\n'.join([de_numbering(seq[1]), *seq[2:]])
+
             data = {
                 'instruction': '' if self.user_names is None else
                 f'User: {self.user_names[uuid]}',
                 'input': seq[0] + f'\n2.',
-                'output': '\n'.join([de_numbering(seq[1]), *seq[2:]]),
+                'output': output_
             }
         return data
 

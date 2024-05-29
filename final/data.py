@@ -142,6 +142,7 @@ def merged_df(
     merged_df.loc[:, 'loaded_pids'] = merged_df['loads'].map(
         lambda loads: [load['item_id'] for load in loads]
     )
+    merged_df = merged_df[merged_df['loaded_pids'].map(len).astype(bool)]
 
     def products_set_to_array(products: set[int]):
         a = np.zeros(N_RPODUCTS, dtype=int)
