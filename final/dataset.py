@@ -1,6 +1,7 @@
 import re
 from typing import Literal
 import pandas as pd
+import numpy as np
 from torch.utils.data import Dataset as TorchDataset
 from . import data
 
@@ -9,7 +10,7 @@ class Dataset(TorchDataset):
 
     def __init__(
         self,
-        split: Literal['train', 'val'],
+        split: Literal['train', 'val', 'train+val'],
         raw_tags: dict[int, list[str]],
         user_names: dict[int, str] = None,
         n_tags_per_product: int = 5,
@@ -17,8 +18,9 @@ class Dataset(TorchDataset):
         predict_purchase_only: bool = True,
     ):
         super().__init__()
-        self.df = pd.DataFrame(Dataset.get_expanded_dataset(split)
-                               ).sample(frac=1)
+        self.df = pd.DataFrame(
+            Dataset.get_expanded_dataset(split, expand=predict_purchase_only)
+        ).sample(frac=1)
         self.raw_tags = raw_tags
         self.user_names = user_names
         self.predict_purchase_only = predict_purchase_only
@@ -27,12 +29,29 @@ class Dataset(TorchDataset):
         return
 
     @staticmethod
-    def get_expanded_dataset(split: Literal['train', 'val']):
-        merged_df = data.merged_df()[split]
+    def get_expanded_dataset(
+        split: Literal['train', 'val', 'train+val'],
+        expand: bool = True,
+    ):
+        if split == 'train+val':
+            merged_df = pd.concat(
+                [data.merged_df()['train'],
+                 data.merged_df()['val']], axis=0
+            )
+        else:
+            merged_df = data.merged_df()[split]
         for _order_id, row in merged_df.iterrows():
-            for product in row['products']:
+            if expand:
+                for product in row['products']:
+                    yield {
+                        'seq': row['loaded_pids'] + [product],
+                        'uuid': row['uuid_ind'],
+                    }
+            else:
+                purchased_products = list(row['products'])
+                np.random.shuffle(purchased_products)
                 yield {
-                    'seq': row['loaded_pids'] + [product],
+                    'seq': row['loaded_pids'] + purchased_products,
                     'uuid': row['uuid_ind'],
                 }
 
@@ -95,13 +114,14 @@ class InferenceDataset(TorchDataset):
         raw_tags: dict[int, list[str]],
         user_names: dict[int, str] = None,
         n_tags_per_product: int = 5,
-        legacy_output_first_time_buyer: bool = True,
+        legacy_output_first_time_buyer: bool = False,
     ):
         super().__init__()
         self.user_names = user_names
         self.raw_tags = raw_tags
         self.n_tags_per_product = n_tags_per_product
         self.output_first_time_buyer = legacy_output_first_time_buyer
+        assert legacy_output_first_time_buyer is False
         return
 
     def __len__(self):
