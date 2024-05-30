@@ -25,6 +25,18 @@ from peft import (
 
 PREFIX_CHECKPOINT_DIR = "ckpt"
 _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
+
+PROMPT_LEGACY = """\
+[INST] <<SYS>>
+{instruction}
+<</SYS>>
+
+{user_instruction}
+{input}
+[/INST]
+"""
+"""Used for ckpt <= ckpt-7"""
+
 PROMPT = """\
 [INST] <<SYS>>
 {instruction}
@@ -33,6 +45,7 @@ PROMPT = """\
 [/INST]
 {input}
 """
+"""Used fro ckpt >= ckpt-8"""
 
 
 def get_last_checkpoint(folder):
@@ -103,6 +116,10 @@ class LLM:
         else:
             cur_ckpt = _re_checkpoint.search(os.path.basename(self.ckpt_name))
             self.cur_ckpt_count = cur_ckpt and int(cur_ckpt.group(1))
+        if self.cur_ckpt_count <= 7:
+            self.prompt_template = PROMPT_LEGACY
+        else:
+            self.prompt_template = PROMPT
         self.inference_only = inference_only
         self._init(model_name)
         return
@@ -219,7 +236,14 @@ class LLM:
         if torch.__version__ >= "2" and sys.platform != 'win32':
             self.model = torch.compile(self.model)
 
-        trainer.train()
+        try:
+            trainer.train()
+        except KeyboardInterrupt as e:
+            next_ckpt_dir += '-aborted'
+            os.makedirs(next_ckpt_dir, exist_ok=True)
+            self.model.save_pretrained(next_ckpt_dir)
+            raise e
+
         # trainer._inner_training_loop(
         #     trainer._train_batch_size,
         #     args=trainer.args,
@@ -281,14 +305,11 @@ class LLM:
 
         """
         # construct full input prompt
-        prompt = f"""\
-[INST] <<SYS>>
-{self.instruction}
-<</SYS>>
-{data_point['instruction']}
-[/INST]
-{data_point['input']}
-"""
+        prompt = self.prompt_template.format(
+            instruction=self.instruction,
+            user_instruction=data_point['instruction'],
+            input=data_point['input'],
+        )
         # count the number of input tokens
         len_user_prompt_tokens = (
             len(
@@ -341,14 +362,11 @@ class LLM:
                 evaluate(instruction="ABC", generation_config=generation_config, max_len=128, input="DEF")
 
         """
-        prompt = f"""\
-[INST] <<SYS>>
-{self.instruction}
-<</SYS>>
-{data_point['instruction']}
-[/INST]
-{data_point['input']}
-"""
+        prompt = self.prompt_template.format(
+            instruction=self.instruction,
+            user_instruction=data_point['instruction'],
+            input=data_point['input'],
+        )
         inputs = self.tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].cuda()
 
