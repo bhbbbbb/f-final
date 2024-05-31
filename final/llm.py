@@ -23,7 +23,7 @@ from peft import (
     prepare_model_for_kbit_training
 )
 
-PREFIX_CHECKPOINT_DIR = "ckpt"
+PREFIX_CHECKPOINT_DIR = "ckpt(-llama2)?"
 _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
 
 PROMPT_LEGACY = """\
@@ -115,7 +115,7 @@ class LLM:
             self.cur_ckpt_count = 0
         else:
             cur_ckpt = _re_checkpoint.search(os.path.basename(self.ckpt_name))
-            self.cur_ckpt_count = cur_ckpt and int(cur_ckpt.group(1))
+            self.cur_ckpt_count = cur_ckpt and int(cur_ckpt.group(2))
         if self.cur_ckpt_count <= 7:
             self.prompt_template = PROMPT_LEGACY
         else:
