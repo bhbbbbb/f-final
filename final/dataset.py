@@ -15,11 +15,16 @@ class Dataset(TorchDataset):
         user_names: dict[int, str] = None,
         n_tags_per_product: int = 5,
         max_load_len: int = 20,
-        predict_purchase_only: bool = True,
+        predict_purchase_only: bool = False,
+        predict_loaded_only: bool = False,
     ):
         super().__init__()
         self.df = pd.DataFrame(
-            Dataset.get_expanded_dataset(split, expand=predict_purchase_only)
+            Dataset.get_expanded_dataset(
+                split,
+                expand=predict_purchase_only,
+                loaded_only=predict_loaded_only,
+            )
         ).sample(frac=1)
         self.raw_tags = raw_tags
         self.user_names = user_names
@@ -32,6 +37,7 @@ class Dataset(TorchDataset):
     def get_expanded_dataset(
         split: Literal['train', 'val', 'train+val'],
         expand: bool = True,
+        loaded_only: bool = None,
     ):
         if split == 'train+val':
             merged_df = pd.concat(
@@ -40,6 +46,8 @@ class Dataset(TorchDataset):
             )
         else:
             merged_df = data.merged_df()[split]
+        if loaded_only:
+            merged_df = merged_df[merged_df['loaded_pids'].map(len) >= 2]
         for _order_id, row in merged_df.iterrows():
             if expand:
                 for product in row['products']:
@@ -47,11 +55,17 @@ class Dataset(TorchDataset):
                         'seq': row['loaded_pids'] + [product],
                         'uuid': row['uuid_ind'],
                     }
-            else:
+            elif loaded_only is False:
                 purchased_products = list(row['products'])
                 np.random.shuffle(purchased_products)
                 yield {
                     'seq': row['loaded_pids'] + purchased_products,
+                    'uuid': row['uuid_ind'],
+                }
+            else:
+                assert loaded_only is True
+                yield {
+                    'seq': row['loaded_pids'],
                     'uuid': row['uuid_ind'],
                 }
 
