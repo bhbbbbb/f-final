@@ -1,5 +1,6 @@
 from typing import Callable, Literal, overload
-from functools import reduce
+from functools import reduce, partial
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 from .bm25 import BM25
@@ -47,7 +48,7 @@ def ranking_metrics(
         -1] == N_RPODUCTS, f'{y_true.shape[-1] = } which != {N_RPODUCTS}'
     assert len(y_true) == len(y_score)
     if ks is None:
-        ks = [1, 5, 10, 20]
+        ks = [5, 10, 20]
     elif isinstance(ks, int):
         ks = [ks]
 
@@ -91,21 +92,49 @@ def iou_score(query: list[str], documents: list[list[str]]):
     return {i: score for i, score in scores() if score > 0}
 
 
+def _query_opt(loaded_tags: list[list[str]], fn):
+
+    domain = set()
+
+    def _to_dict(tags: list[str]):
+        buckets = defaultdict(int)
+        for tag in tags:
+            buckets[tag] += 1
+            domain.add(tag)
+        return buckets
+
+    loaded_buckets = list(map(_to_dict, loaded_tags))
+    results = {}
+    for tag in domain:
+        v = fn(buckets[tag] for buckets in loaded_buckets)
+        results[tag] = v
+    return reduce(
+        lambda a, b: a + b, [[tag] * v for tag, v in results.items()], list()
+    )
+
+
+# def cheat_query_fn(loaded_tags: list[list[str]]):
+#     return reduce(
+#         lambda a, b: a + b,
+#         [tags * (i + 1) for i, tags in enumerate(loaded_tags)], list()
+#     )
+
+
 class TagsEvaluator:
 
     def __init__(
         self,
         product_tags: dict[int, list[str]],
-        query_fn: Literal['union', 'concat']
-        | Callable[[list[list[str]]], list[str]] = 'concat',
+        query_fn: Literal['union', 'concat', 'intersection', 'sum']
+        | Callable[[list[list[str]]], list[str]] = 'sum',
         score_algorithm: Literal['bm25', 'iou'] = 'bm25',
     ):
         """
         Args:
             product_tags (dict[int, list[str]]): Mapping that map product ids to their tags.
-            query_fn (Literal['union', 'concat'] | Callable[[list[list[str]]], list[str]], optional): 
+            query_fn (Literal['union', 'sum'] | Callable[[list[list[str]]], list[str]], optional): 
                 Function to reduce the tags of loaded products (list[list[str]]) to be query (list[str]).
-                Defaults to 'concat'.
+                Defaults to 'sum'.
             score_algorithm (Literal['bm25', 'iou'], optional): _description_. Defaults to 'bm25'.
         """
 
@@ -119,18 +148,19 @@ class TagsEvaluator:
         self.product_tags = product_tags
         self.corpus = list(product_tags.values())
         if score_algorithm == 'bm25':
-            bm25 = BM25(self.corpus)
+            bm25 = BM25(self.corpus, k1=0.75)
             self.scores_fn = bm25.get_scores
         else:
             assert query_fn == 'union', 'when score using IoU, qurey_reduce only accept "union"'
             self.scores_fn = iou_score
 
-        if query_fn in ('union', 'concat'):
-            query_reduce_fn = (
-                (lambda a, b: a + b) if query_fn == 'concat' else
-                (lambda a, b: set(a) | set(b))
-            )
-            self.query_fn = lambda seq: reduce(query_reduce_fn, seq, list())
+        if query_fn in ('union', 'concat', 'intersection', 'sum'):
+            if query_fn == 'union':
+                self.query_fn = partial(_query_opt, fn=max)
+            elif query_fn == 'intersection':
+                self.query_fn = partial(_query_opt, fn=min)
+            else:
+                self.query_fn = partial(_query_opt, fn=sum)
         else:
             self.query_fn = query_fn
 
@@ -178,7 +208,7 @@ class TagsEvaluator:
         self,
         merged_df: pd.DataFrame | None = None,
         *,
-        ks: list[int] = [1, 5, 10, 20],
+        ks: list[int] = [5, 10, 20],
     ):
 
         if merged_df is not None:

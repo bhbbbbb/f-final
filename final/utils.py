@@ -1,7 +1,8 @@
+from typing import Literal
 import re
 import numpy as np
 import pandas as pd
-from .data import PID_MAPPING, AVAILABLE_PRODUCT_IDS
+from .data import PID_MAPPING, AVAILABLE_PRODUCT_IDS, N_RPODUCTS
 
 
 def url_to_pid(url: str):
@@ -73,3 +74,45 @@ def baseline_score(merged_df: pd.DataFrame):
         return {pid: (i + 1) for i, pid in enumerate(loads)}
 
     return merged_df['loaded_pids'].map(cal_score)
+
+
+def next_product_expansion(
+    merged_df: pd.DataFrame,
+    target: Literal['last', 'iterative'] = 'last',
+):
+    merged_df = merged_df[merged_df['loaded_pids'].map(len) >= 2]
+    if target == 'last':
+
+        def drop_last(seq: list[int]):
+            return seq[:-1]
+
+        def get_last(seq: list[int]):
+            return PID_MAPPING[seq[-1]]
+
+        loaded_pids = merged_df['loaded_pids'].map(drop_last)
+        y_true_id = merged_df['loaded_pids'].map(get_last)
+        y_true = np.zeros((len(y_true_id), N_RPODUCTS), dtype=int)
+        np.put_along_axis(
+            y_true,
+            y_true_id.to_numpy().reshape(-1, 1), 1, axis=1
+        )
+
+        return pd.DataFrame(
+            {
+                'loaded_pids': loaded_pids,
+                'y_true': list(y_true),
+                'y_true_id': y_true_id.map(lambda i: AVAILABLE_PRODUCT_IDS[i])
+            }
+        )
+    assert target == 'iterative'
+
+    def explode():
+        for pids in merged_df['loaded_pids']:
+            for seq_len in range(1, len(pids)):
+                seq = pids[:seq_len]
+                y = pids[seq_len]
+                y_true = np.zeros(N_RPODUCTS, dtype=int)
+                y_true[PID_MAPPING[y]] = 1
+                yield {'loaded_pids': seq, 'y_true': y_true, 'y_true_id': y}
+
+    return pd.DataFrame(explode())
