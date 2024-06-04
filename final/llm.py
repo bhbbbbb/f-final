@@ -15,14 +15,14 @@ import transformers
 from peft import PeftModel
 from colorama import *
 
-from tqdm import tqdm
-from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig
-from transformers import GenerationConfig, trainer_utils
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers.utils import logging
 from peft import (
     LoraConfig, get_peft_model, get_peft_model_state_dict,
     prepare_model_for_kbit_training
 )
 
+logging.get_logger("transformers").setLevel(logging.ERROR)
 PREFIX_CHECKPOINT_DIR = "ckpt(-llama2)?"
 _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
 

@@ -3,6 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 from .data import PID_MAPPING, AVAILABLE_PRODUCT_IDS, N_RPODUCTS
+from thefuzz import fuzz
 
 
 def url_to_pid(url: str):
@@ -99,6 +100,7 @@ def next_product_expansion(
 
         return pd.DataFrame(
             {
+                'uuid_ind': merged_df['uuid_ind'],
                 'loaded_pids': loaded_pids,
                 'y_true': list(y_true),
                 'y_true_id': y_true_id.map(lambda i: AVAILABLE_PRODUCT_IDS[i])
@@ -116,3 +118,63 @@ def next_product_expansion(
                 yield {'loaded_pids': seq, 'y_true': y_true, 'y_true_id': y}
 
     return pd.DataFrame(explode())
+
+
+class FuzzySet:
+
+    def __init__(
+        self, threshold: int, mode: Literal['simple', 'sort', 'set'] = 'sort'
+    ):
+        self.threshold = threshold
+        self.domain: set[str] = set()
+        MAPPER = {
+            'simple': fuzz.ratio,
+            'sort': fuzz.token_sort_ratio,
+            'set': fuzz.token_set_ratio,
+        }
+        self.fuzz_fn = MAPPER[mode]
+        return
+
+    def get(self, item: str, default=None):
+        try:
+            return self.__getitem__(item)
+        except KeyError:
+            return default
+
+    def __len__(self):
+        return len(self.domain)
+
+    def __getitem__(self, item: str):
+        for tag in self.domain:
+            if self.fuzz_fn(item, tag) >= self.threshold:
+                return tag
+        raise KeyError(f'key: {item} not found.')
+
+    def add(self, item: str, verbose: bool = False):
+        match = self.get(item, None)
+        if match is None:
+            self.domain.add(item)
+
+        if verbose:
+            if match is None:
+                # print(f'item: "{item}" not found. added.')
+                pass
+            elif match != item:
+                print(f'item: "{item}" matches with "{match}". skipped.')
+        return
+
+    @classmethod
+    def from_corpus(
+        cls,
+        corpus: list[list[str]],
+        threshold: int,
+        mode: Literal['simple', 'sort', 'set'] = 'sort',
+        verbose: bool = False,
+    ):
+        corpus = np.array(sum(corpus, start=list()))
+        perm = np.random.permutation(len(corpus))
+        domain = cls(threshold, mode=mode)
+        for tag in corpus[perm]:
+            domain.add(tag)
+        print(f'{len(corpus) = }, {len(domain) = }')
+        return domain

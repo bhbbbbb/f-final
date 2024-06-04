@@ -3,7 +3,7 @@ from typing import Literal
 import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset as TorchDataset
-from . import data
+from . import data, utils
 
 
 class Dataset(TorchDataset):
@@ -157,3 +157,46 @@ class InferenceDataset(TorchDataset):
             'input':
             input_,
         }
+
+
+class TestDataset(TorchDataset):
+
+    def __init__(
+        self,
+        raw_tags: dict[int, list[str]],
+        user_names: dict[int, str] = None,
+        n_tags_per_product: int = 5,
+        max_load_len: int = 20,
+        *args,
+        **kwargs,
+    ):
+        super().__init__()
+        merged_df = data.merged_df()['test']
+        self.df = utils.next_product_expansion(merged_df)
+        self.raw_tags = raw_tags
+        self.user_names = user_names
+        assert user_names is None
+        self.n_tags_per_product = n_tags_per_product
+        self.max_load_len = max_load_len
+        return
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, index: int):
+
+        def pid_to_input(i: int, pid: int):
+            return (
+                f'{i+1}. ' +
+                ', '.join(self.raw_tags[pid][:self.n_tags_per_product])
+            )
+
+        seq = self.df['loaded_pids'].iloc[index]
+        seq = seq[-self.max_load_len:]
+        seq = list(map(pid_to_input, range(len(seq)), seq))
+
+        data = {
+            'instruction': '',
+            'input': '\n'.join(seq) + f'\n{len(seq) + 1}.',
+        }
+        return data
