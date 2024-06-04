@@ -23,7 +23,7 @@ dependencies = [
     # "torch==2.0.1",
     "packaging",
 ]
-version = "0.1.0"
+version = "0.1.1"
 
 [project.optional-dependencies]
 # scripts = [
