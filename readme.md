@@ -7,7 +7,7 @@
 pip install git+https://github.com/bhbbbbb/f-final
 ```
 
-You may also need to install some additional dependencies. For working on colab, please follow the first cell of [llm_inference.ipynb](./demos/llm_inference.ipynb).
+You may also need to install some additional dependencies. For working on colab, please follow the first cell of [llm_inference.ipynb](./demos/llm_inference.ipynb). Otherwise, check the `requirements.txt`.
 
 Check [general_demo](./demos/demo.ipynb) for more demonstration of basic usage.
 
