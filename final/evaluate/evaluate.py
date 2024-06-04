@@ -113,6 +113,10 @@ def _query_opt(loaded_tags: list[list[str]], fn):
     )
 
 
+def _query_last(loaded_tags: list[list[str]]):
+    return loaded_tags[-1]
+
+
 # def cheat_query_fn(loaded_tags: list[list[str]]):
 #     return reduce(
 #         lambda a, b: a + b,
@@ -126,7 +130,7 @@ class TagsEvaluator:
         self,
         product_tags: dict[int, list[str]],
         query_fn: Literal['union', 'concat', 'intersection', 'sum']
-        | Callable[[list[list[str]]], list[str]] = 'sum',
+        | Callable[[list[list[str]]], list[str]] = 'union',
         score_algorithm: Literal['bm25', 'iou'] = 'bm25',
     ):
         """
@@ -154,12 +158,14 @@ class TagsEvaluator:
             assert query_fn == 'union', 'when score using IoU, qurey_reduce only accept "union"'
             self.scores_fn = iou_score
 
-        if query_fn in ('union', 'concat', 'intersection', 'sum'):
+        if query_fn in ('union', 'concat', 'intersection', 'sum', 'last'):
             if query_fn == 'union':
                 self.query_fn = partial(_query_opt, fn=max)
             elif query_fn == 'intersection':
                 self.query_fn = partial(_query_opt, fn=min)
-            else:
+            elif query_fn == 'last':
+                self.query_fn = _query_last
+            else:  #sum
                 self.query_fn = partial(_query_opt, fn=sum)
         else:
             self.query_fn = query_fn
