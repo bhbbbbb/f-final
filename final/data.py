@@ -186,7 +186,13 @@ def product_tags_v5_en(cache_dir: str = _CACHE_DIR, lower: bool = False):
 def product_keywords(cache_dir: str = _CACHE_DIR):
     URL = 'https://www.dropbox.com/scl/fi/qzzvixy6kjdn5kotuxs8b/product_keywords.json?rlkey=f5mriku26ghw3obhpcfcqgtn0&st=3o0a4s9t&dl=0'
     d = _download(URL, cache_dir=cache_dir)
-    return {int(pid): [tag.lower() for tag in tags] for pid, tags in d.items()}
+    return {int(pid): tags for pid, tags in d.items()}
+
+
+def enhanced_tags_rev(cache_dir: str = _CACHE_DIR):
+    URL = 'https://www.dropbox.com/scl/fi/140eulthrh6joolknydyn/enhanced_tags_rev.json?rlkey=8vzse22pi1el7m7p3j0a9htza&st=f00m80yq&dl=0'
+    d = _download(URL, cache_dir=cache_dir)
+    return {int(pid): tags for pid, tags in d.items()}
 
 
 def list_all_available_data():
