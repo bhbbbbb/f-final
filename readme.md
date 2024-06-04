@@ -4,7 +4,8 @@
 
 
 ```sh
-pip install git+https://github.com/bhbbbbb/f-final
+cd final
+pip install .
 ```
 
 You may also need to install some additional dependencies. For working on colab, please follow the first cell of [llm_inference.ipynb](./demos/llm_inference.ipynb). Otherwise, check the `requirements.txt`.
