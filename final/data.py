@@ -22,6 +22,7 @@ __all__ = [
     'product_tags_v5_en',
     'product_tags_v5_zh',
     'product_keywords',
+    'enhanced_tags_rev',
 ]
 
 _DATASET_URL = 'https://www.dropbox.com/scl/fi/ejkje0mv5wfcaanpgtzui/datasets_20240520.zip?rlkey=muu7ycdkbqyaxlcgfl6psomqe&st=qw5a4p94&dl=0'
